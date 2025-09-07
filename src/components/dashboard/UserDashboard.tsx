@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   User, 
   Store, 
@@ -33,50 +34,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { useStores, useSubmitRating, useUserRatings } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/hooks/useAuth';
 
 const UserDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStore, setSelectedStore] = useState<any>(null);
   const [userRating, setUserRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Mock data - will be replaced with Supabase data
-  const mockStores = [
-    { 
-      id: 1, 
-      name: 'Tech Paradise Electronics Store', 
-      address: '123 Tech Street, Silicon Valley, CA', 
-      rating: 4.5, 
-      userRating: 5,
-      totalRatings: 234
-    },
-    { 
-      id: 2, 
-      name: 'Green Garden Organic Market', 
-      address: '456 Organic Lane, Portland, OR', 
-      rating: 4.8, 
-      userRating: null,
-      totalRatings: 189
-    },
-    { 
-      id: 3, 
-      name: 'Fashion Forward Boutique', 
-      address: '789 Style Avenue, New York, NY', 
-      rating: 4.2, 
-      userRating: 4,
-      totalRatings: 156
-    },
-    { 
-      id: 4, 
-      name: 'Coffee Corner Cafe', 
-      address: '321 Bean Street, Seattle, WA', 
-      rating: 4.7, 
-      userRating: null,
-      totalRatings: 298
-    },
-  ];
+  const { user, profile } = useAuth();
+  const { stores, loading: storesLoading, refetch: refetchStores } = useStores();
+  const { userRatings, loading: ratingsLoading, refetch: refetchUserRatings } = useUserRatings();
+  const { submitRating, submitting } = useSubmitRating();
 
-  const filteredStores = mockStores.filter(store => 
+  const filteredStores = stores.filter(store => 
     store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     store.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -111,10 +85,15 @@ const UserDashboard = () => {
     );
   };
 
-  const handleRateStore = (storeId: number, rating: number) => {
-    // TODO: Implement rating submission to Supabase
-    console.log('Rating store:', storeId, 'with rating:', rating);
-    // Update local state or refetch data
+  const handleRateStore = async (storeId: string, rating: number) => {
+    const { error } = await submitRating(storeId, rating, comment);
+    if (!error) {
+      setDialogOpen(false);
+      setComment('');
+      setUserRating(0);
+      refetchStores();
+      refetchUserRatings();
+    }
   };
 
   return (
@@ -129,7 +108,9 @@ const UserDashboard = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">User Dashboard</h1>
-                <p className="text-sm text-muted-foreground">Welcome back, John!</p>
+                <p className="text-sm text-muted-foreground">
+                  Welcome back, {profile?.full_name || user?.email}!
+                </p>
               </div>
             </div>
           </div>
@@ -181,119 +162,145 @@ const UserDashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Store Name</TableHead>
-                        <TableHead>Address</TableHead>
-                        <TableHead>Overall Rating</TableHead>
-                        <TableHead>Your Rating</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredStores.length === 0 ? (
+                {storesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-2"></div>
+                    <span>Loading stores...</span>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No stores found matching your search
-                          </TableCell>
+                          <TableHead>Store Name</TableHead>
+                          <TableHead>Address</TableHead>
+                          <TableHead>Overall Rating</TableHead>
+                          <TableHead>Your Rating</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ) : (
-                        filteredStores.map((store) => (
-                          <TableRow key={store.id} className="hover:bg-muted/50">
-                            <TableCell className="font-medium">{store.name}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center text-muted-foreground">
-                                <MapPin className="h-4 w-4 mr-1" />
-                                <span className="max-w-xs truncate" title={store.address}>
-                                  {store.address}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center space-x-2">
-                                {renderStars(store.rating)}
-                                <span className="text-sm text-muted-foreground">
-                                  ({store.totalRatings})
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {store.userRating ? (
-                                <div className="flex items-center space-x-2">
-                                  {renderStars(store.userRating)}
-                                  <Badge variant="secondary">Rated</Badge>
-                                </div>
-                              ) : (
-                                <Badge variant="outline">Not rated</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedStore(store);
-                                      setUserRating(store.userRating || 0);
-                                    }}
-                                  >
-                                    {store.userRating ? (
-                                      <>
-                                        <Edit2 className="h-4 w-4 mr-1" />
-                                        Edit Rating
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Star className="h-4 w-4 mr-1" />
-                                        Rate Store
-                                      </>
-                                    )}
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>
-                                      {store.userRating ? 'Update Rating' : 'Rate Store'}
-                                    </DialogTitle>
-                                    <DialogDescription>
-                                      Rate {store.name} from 1 to 5 stars
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="py-6">
-                                    <div className="space-y-4">
-                                      <div>
-                                        <h4 className="font-medium mb-2">{store.name}</h4>
-                                        <p className="text-sm text-muted-foreground">{store.address}</p>
-                                      </div>
-                                      <div className="space-y-2">
-                                        <Label>Your Rating</Label>
-                                        {renderStars(userRating, true, (rating) => handleRateStore(store.id, rating))}
-                                        <p className="text-sm text-muted-foreground">
-                                          Click on stars to rate (1-5 stars)
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <DialogFooter>
-                                    <Button 
-                                      className="bg-gradient-primary hover:bg-primary-hover"
-                                      disabled={userRating === 0}
-                                    >
-                                      Submit Rating
-                                    </Button>
-                                  </DialogFooter>
-                                </DialogContent>
-                              </Dialog>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredStores.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                              No stores found matching your search
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                        ) : (
+                          filteredStores.map((store) => {
+                            const hasUserRating = userRatings[store.id];
+                            return (
+                              <TableRow key={store.id} className="hover:bg-muted/50">
+                                <TableCell className="font-medium">{store.name}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center text-muted-foreground">
+                                    <MapPin className="h-4 w-4 mr-1" />
+                                    <span className="max-w-xs truncate" title={store.address}>
+                                      {store.address}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    {renderStars(store.average_rating)}
+                                    <span className="text-sm text-muted-foreground">
+                                      ({store.total_ratings})
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {hasUserRating ? (
+                                    <div className="flex items-center space-x-2">
+                                      {renderStars(hasUserRating)}
+                                      <Badge variant="secondary">Rated</Badge>
+                                    </div>
+                                  ) : (
+                                    <Badge variant="outline">Not rated</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                                    <DialogTrigger asChild>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedStore(store);
+                                          setUserRating(userRatings[store.id] || 0);
+                                          setComment('');
+                                          setDialogOpen(true);
+                                        }}
+                                      >
+                                        {hasUserRating ? (
+                                          <>
+                                            <Edit2 className="h-4 w-4 mr-1" />
+                                            Edit Rating
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Star className="h-4 w-4 mr-1" />
+                                            Rate Store
+                                          </>
+                                        )}
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>
+                                          {hasUserRating ? 'Update Rating' : 'Rate Store'}
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                          Rate {selectedStore?.name} from 1 to 5 stars
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="py-6">
+                                        <div className="space-y-4">
+                                          <div>
+                                            <h4 className="font-medium mb-2">{selectedStore?.name}</h4>
+                                            <p className="text-sm text-muted-foreground">{selectedStore?.address}</p>
+                                          </div>
+                                          <div className="space-y-2">
+                                            <Label>Your Rating</Label>
+                                            {renderStars(userRating, true, (rating) => setUserRating(rating))}
+                                            <p className="text-sm text-muted-foreground">
+                                              Click on stars to rate (1-5 stars)
+                                            </p>
+                                          </div>
+                                          <div className="space-y-2">
+                                            <Label>Comment (optional)</Label>
+                                            <Textarea
+                                              placeholder="Share your experience..."
+                                              value={comment}
+                                              onChange={(e) => setComment(e.target.value)}
+                                              className="resize-none"
+                                              rows={3}
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <DialogFooter>
+                                        <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                                          Cancel
+                                        </Button>
+                                        <Button 
+                                          className="bg-gradient-primary hover:bg-primary-hover"
+                                          disabled={userRating === 0 || submitting}
+                                          onClick={() => selectedStore && handleRateStore(selectedStore.id, userRating)}
+                                        >
+                                          {submitting ? 'Submitting...' : 'Submit Rating'}
+                                        </Button>
+                                      </DialogFooter>
+                                    </DialogContent>
+                                  </Dialog>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -308,11 +315,11 @@ const UserDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
-                    <Input value="John Smith Anderson" disabled />
+                    <Input value={profile?.full_name || 'Not provided'} disabled />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input value="john@example.com" disabled />
+                    <Input value={user?.email || 'Not available'} disabled />
                   </div>
                 </div>
                 <div className="space-y-2">

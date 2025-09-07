@@ -12,7 +12,7 @@ import {
 import { Eye, Edit, Trash2, ArrowUpDown } from 'lucide-react';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   address: string;

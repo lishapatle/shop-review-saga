@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,30 +25,36 @@ import {
 import StatsCard from '@/components/dashboard/StatsCard';
 import UserTable from '@/components/dashboard/UserTable';
 import StoreTable from '@/components/dashboard/StoreTable';
+import { useProfiles, useStores, useDashboardStats } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/hooks/useAuth';
 
 const AdminDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  
+  const { user, profile } = useAuth();
+  const { profiles, loading: profilesLoading } = useProfiles();
+  const { stores, loading: storesLoading } = useStores();
+  const { stats, loading: statsLoading } = useDashboardStats();
 
-  // Mock data - will be replaced with Supabase data
-  const dashboardStats = {
-    totalUsers: 1245,
-    totalStores: 89,
-    totalRatings: 3456,
-    avgRating: 4.2
-  };
+  // Transform profiles data for UserTable component
+  const transformedUsers = profiles.map(profile => ({
+    id: profile.id,
+    name: profile.full_name || 'No name provided',
+    email: `user-${profile.user_id.slice(0, 8)}@example.com`, // Simplified since we don't have email in profiles
+    address: 'Address not available', // Address not in current schema
+    role: profile.role === 'store_owner' ? 'Store Owner' : 
+          profile.role === 'admin' ? 'System Admin' : 'Normal User'
+  }));
 
-  const mockUsers = [
-    { id: 1, name: 'John Smith Anderson', email: 'john@example.com', address: '123 Main St, New York, NY', role: 'Normal User' },
-    { id: 2, name: 'Sarah Johnson Williams', email: 'sarah@example.com', address: '456 Oak Ave, Los Angeles, CA', role: 'Store Owner' },
-    { id: 3, name: 'Michael Brown Davis', email: 'michael@example.com', address: '789 Pine Rd, Chicago, IL', role: 'Normal User' },
-  ];
-
-  const mockStores = [
-    { id: 1, name: 'Tech Paradise Electronics Store', email: 'contact@techparadise.com', address: '123 Tech Street, Silicon Valley, CA', rating: 4.5 },
-    { id: 2, name: 'Green Garden Organic Market', email: 'info@greengarden.com', address: '456 Organic Lane, Portland, OR', rating: 4.8 },
-    { id: 3, name: 'Fashion Forward Boutique', email: 'hello@fashionforward.com', address: '789 Style Avenue, New York, NY', rating: 4.2 },
-  ];
+  // Transform stores data for StoreTable component  
+  const transformedStores = stores.map(store => ({
+    id: store.id,
+    name: store.name,
+    email: store.email || `${store.name.toLowerCase().replace(/\s+/g, '')}@store.com`,
+    address: store.address,
+    rating: store.average_rating
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -62,7 +68,9 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">Admin Dashboard</h1>
-                <p className="text-sm text-muted-foreground">System Administrator</p>
+                <p className="text-sm text-muted-foreground">
+                  Welcome, {profile?.full_name || 'Administrator'}
+                </p>
               </div>
             </div>
           </div>
@@ -83,7 +91,7 @@ const AdminDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
             title="Total Users"
-            value={dashboardStats.totalUsers.toLocaleString()}
+            value={statsLoading ? '...' : stats.totalUsers.toLocaleString()}
             icon={Users}
             trend="+12%"
             trendUp={true}
@@ -91,7 +99,7 @@ const AdminDashboard = () => {
           />
           <StatsCard
             title="Total Stores"
-            value={dashboardStats.totalStores.toLocaleString()}
+            value={statsLoading ? '...' : stats.totalStores.toLocaleString()}
             icon={Store}
             trend="+5%"
             trendUp={true}
@@ -99,7 +107,7 @@ const AdminDashboard = () => {
           />
           <StatsCard
             title="Total Ratings"
-            value={dashboardStats.totalRatings.toLocaleString()}
+            value={statsLoading ? '...' : stats.totalRatings.toLocaleString()}
             icon={Star}
             trend="+18%"
             trendUp={true}
@@ -107,7 +115,7 @@ const AdminDashboard = () => {
           />
           <StatsCard
             title="Average Rating"
-            value={dashboardStats.avgRating.toString()}
+            value={statsLoading ? '...' : stats.avgRating.toString()}
             icon={BarChart3}
             trend="+0.2"
             trendUp={true}
@@ -167,11 +175,23 @@ const AdminDashboard = () => {
               </div>
 
               <TabsContent value="users" className="space-y-4">
-                <UserTable users={mockUsers} searchTerm={searchTerm} roleFilter={roleFilter} />
+                {profilesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  <UserTable users={transformedUsers} searchTerm={searchTerm} roleFilter={roleFilter} />
+                )}
               </TabsContent>
 
               <TabsContent value="stores" className="space-y-4">
-                <StoreTable stores={mockStores} searchTerm={searchTerm} />
+                {storesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  <StoreTable stores={transformedStores} searchTerm={searchTerm} />
+                )}
               </TabsContent>
 
               <TabsContent value="analytics" className="space-y-4">

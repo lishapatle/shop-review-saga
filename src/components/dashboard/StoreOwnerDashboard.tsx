@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,46 +21,32 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import StatsCard from '@/components/dashboard/StatsCard';
+import { useAuth } from '@/hooks/useAuth';
+import { useStores } from '@/hooks/useSupabaseData';
+import { useEnhancedRatings } from '@/hooks/useEnhancedRatings';
 
 const StoreOwnerDashboard = () => {
-  // Mock data - will be replaced with Supabase data
-  const storeStats = {
-    averageRating: 4.5,
-    totalRatings: 234,
-    totalCustomers: 156,
-    monthlyGrowth: 12
-  };
+  const { user, profile } = useAuth();
+  const { stores, loading: storesLoading } = useStores();
+  const [userStore, setUserStore] = useState<any>(null);
+  
+  // Get the store owned by current user
+  useEffect(() => {
+    if (user && stores.length > 0) {
+      const ownedStore = stores.find(store => store.owner_id === user.id);
+      setUserStore(ownedStore);
+    }
+  }, [user, stores]);
 
-  const mockRatings = [
-    { 
-      id: 1, 
-      customerName: 'John Smith Anderson', 
-      rating: 5, 
-      date: '2024-01-15',
-      comment: 'Excellent service and great product quality!'
-    },
-    { 
-      id: 2, 
-      customerName: 'Sarah Johnson Williams', 
-      rating: 4, 
-      date: '2024-01-14',
-      comment: 'Good experience overall, fast delivery.'
-    },
-    { 
-      id: 3, 
-      customerName: 'Michael Brown Davis', 
-      rating: 5, 
-      date: '2024-01-13',
-      comment: 'Outstanding customer support and quality products.'
-    },
-    { 
-      id: 4, 
-      customerName: 'Emily Wilson Garcia', 
-      rating: 4, 
-      date: '2024-01-12',
-      comment: 'Nice store, will definitely come back.'
-    },
-  ];
+  const { ratings, loading: ratingsLoading } = useEnhancedRatings(userStore?.id);
+
+  // Calculate stats from real data
+  const storeStats = {
+    averageRating: userStore?.average_rating || 0,
+    totalRatings: userStore?.total_ratings || 0,
+    totalCustomers: ratings.length, // Unique ratings = unique customers for this store
+    monthlyGrowth: 12 // This would need more complex calculation with historical data
+  };
 
   const renderStars = (rating: number) => {
     return (
@@ -81,14 +68,16 @@ const StoreOwnerDashboard = () => {
 
   const getRatingDistribution = () => {
     const distribution = [0, 0, 0, 0, 0];
-    mockRatings.forEach(rating => {
-      distribution[rating.rating - 1]++;
+    ratings.forEach(rating => {
+      if (rating.rating >= 1 && rating.rating <= 5) {
+        distribution[rating.rating - 1]++;
+      }
     });
     return distribution.reverse(); // 5 stars first
   };
 
   const ratingDistribution = getRatingDistribution();
-  const totalRatings = mockRatings.length;
+  const totalRatings = ratings.length;
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -102,7 +91,9 @@ const StoreOwnerDashboard = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">Store Dashboard</h1>
-                <p className="text-sm text-muted-foreground">Tech Paradise Electronics Store</p>
+                <p className="text-sm text-muted-foreground">
+                  {userStore?.name || 'No store found'}
+                </p>
               </div>
             </div>
           </div>
@@ -171,36 +162,51 @@ const StoreOwnerDashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Customer Name</TableHead>
-                        <TableHead>Rating</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Comment</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockRatings.map((rating) => (
-                        <TableRow key={rating.id} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{rating.customerName}</TableCell>
-                          <TableCell>
-                            {renderStars(rating.rating)}
-                          </TableCell>
-                          <TableCell>
-                            {new Date(rating.date).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="max-w-md">
-                            <p className="text-sm text-muted-foreground truncate" title={rating.comment}>
-                              {rating.comment}
-                            </p>
-                          </TableCell>
+                {ratingsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-2"></div>
+                    <span>Loading ratings...</span>
+                  </div>
+                ) : ratings.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Star className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                    <p>No ratings yet</p>
+                    <p className="text-sm">Your store hasn't received any ratings yet.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Rating</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Comment</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {ratings.map((rating) => (
+                          <TableRow key={rating.id} className="hover:bg-muted/50">
+                            <TableCell className="font-medium">
+                              {rating.customerName}
+                            </TableCell>
+                            <TableCell>
+                              {renderStars(rating.rating)}
+                            </TableCell>
+                            <TableCell>
+                              {new Date(rating.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="max-w-md">
+                              <p className="text-sm text-muted-foreground truncate" title={rating.comment || undefined}>
+                                {rating.comment || 'No comment provided'}
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -265,16 +271,16 @@ const StoreOwnerDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Store Name</label>
-                    <p className="p-2 bg-muted rounded">Tech Paradise Electronics Store</p>
+                    <p className="p-2 bg-muted rounded">{userStore?.name || 'No store configured'}</p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Email</label>
-                    <p className="p-2 bg-muted rounded">contact@techparadise.com</p>
+                    <p className="p-2 bg-muted rounded">{userStore?.email || 'Not provided'}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Address</label>
-                  <p className="p-2 bg-muted rounded">123 Tech Street, Silicon Valley, CA 94025</p>
+                  <p className="p-2 bg-muted rounded">{userStore?.address || 'Not provided'}</p>
                 </div>
                 <div className="pt-4">
                   <Button className="bg-gradient-primary hover:bg-primary-hover">
